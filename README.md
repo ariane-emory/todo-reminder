@@ -22,3 +22,16 @@ Place this folder in your OpenCode plugin directory:
 ```
 ~/.config/opencode/supplemental/plugin/todo-reminder/
 ```
+
+## Verification
+
+Check logs to verify the plugin is working:
+```bash
+grep "service=todo-reminder" ~/.local/share/opencode/log/dev.log
+```
+
+You should see entries like:
+- `Plugin loaded` - when OpenCode starts
+- `Injected reminder for X pending todo(s)` - when a reminder is added
+- `Skipping - cooldown active` - when waiting for 2 messages between reminders
+- `No pending todos` - when all todos are completed
