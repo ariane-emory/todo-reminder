@@ -56,13 +56,28 @@ export const TodoReminderPlugin: Plugin = async ({ client }) => {
         const lastUser = messages.findLast((m) => m.info.role === "user");
         if (!lastUser) return;
 
-        lastUser.parts.push({
-          id: `todo-reminder-${Date.now()}`,
-          messageID: lastUser.info.id,
-          sessionID: lastUser.info.sessionID,
-          type: "text",
-          text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
-        });
+        const now = Date.now();
+        const reminderMessage = {
+          info: {
+            id: `todo-reminder-msg-${now}`,
+            sessionID: sessionID,
+            role: "user" as const,
+            agent: lastUser.info.agent,
+            model: lastUser.info.model,
+            time: { created: now },
+          },
+          parts: [
+            {
+              id: `todo-reminder-part-${now}`,
+              messageID: `todo-reminder-msg-${now}`,
+              sessionID: sessionID,
+              type: "text" as const,
+              text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
+            },
+          ],
+        };
+
+        messages.push(reminderMessage);
 
         lastInjectionCount.set(sessionID, assistantCount);
         
