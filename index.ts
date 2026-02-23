@@ -61,10 +61,7 @@ export const TodoReminderPlugin: Plugin = async ({ client }) => {
           messageID: lastUser.info.id,
           sessionID: lastUser.info.sessionID,
           type: "text",
-          text: `<system-reminder>
-You have ${pending.length} pending todo item(s). After completing your current task, please review and update your todo list using the todowrite tool.
-</system-reminder>`,
-          synthetic: true,
+          text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
         });
 
         lastInjectionCount.set(sessionID, assistantCount);

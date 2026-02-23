@@ -5,7 +5,7 @@ An OpenCode plugin that reminds the model to update its todo list when there are
 ## How It Works
 
 1. Detects when there are pending (incomplete) todo items
-2. Injects a synthetic reminder message after the model responds
+2. Injects a visible reminder message (`[Todo Reminder]`) after the model responds
 3. Uses a 2-message cooldown to prevent infinite reminder loops
 
 ## Loop Prevention
@@ -25,7 +25,9 @@ Place this folder in your OpenCode plugin directory:
 
 ## Verification
 
-Check logs to verify the plugin is working:
+Reminders appear in the chat as `[Todo Reminder]` messages, so you can see them directly in the UI.
+
+For additional debugging, check logs:
 ```bash
 grep "service=todo-reminder" ~/.local/share/opencode/log/dev.log
 ```
