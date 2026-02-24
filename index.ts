@@ -23,25 +23,17 @@ export const TodoReminderPlugin: Plugin = async ({ client }) => {
   await log(client, "info", "Plugin loaded");
 
   return {
-    "experimental.chat.messages.transform": async ({}, { messages }) => {
-      const lastAssistant = messages.findLast((m) => m.info.role === "assistant");
-      if (!lastAssistant) return;
+    "chat.message": async (input, output) => {
+      // Only trigger on assistant messages (model responses)
+      if (output.message.role !== "assistant") return;
 
-      const sessionID = lastAssistant.info.sessionID;
+      const sessionID = input.sessionID;
       
-      const assistantCount = messages.filter((m) => m.info.role === "assistant").length;
+      // Count assistant messages by checking how many times this hook has fired
+      // We use a simple counter per session
+      const currentCount = (lastInjectionCount.get(sessionID) ?? 0) + 1;
       
-      const lastCount = lastInjectionCount.get(sessionID);
-      
-      if (lastCount !== undefined && assistantCount - lastCount < 2) {
-        await log(client, "debug", "Skipping - cooldown active", { 
-          sessionID, 
-          lastCount, 
-          assistantCount 
-        });
-        return;
-      }
-
+      // Query the todo list
       try {
         const response = await client.session.todo({ path: { id: sessionID } });
         const todos = response.data || [];
@@ -50,44 +42,57 @@ export const TodoReminderPlugin: Plugin = async ({ client }) => {
         
         if (pending.length === 0) {
           await log(client, "debug", "No pending todos", { sessionID });
+          lastInjectionCount.set(sessionID, currentCount);
           return;
         }
 
-        const lastUser = messages.findLast((m) => m.info.role === "user");
-        if (!lastUser) return;
+        // Cooldown: require at least 2 assistant messages since last injection
+        // First injection happens at message 2
+        if (currentCount < 2) {
+          await log(client, "debug", "Waiting for more messages", { 
+            sessionID, 
+            currentCount 
+          });
+          lastInjectionCount.set(sessionID, currentCount);
+          return;
+        }
 
-        const now = Date.now();
-        const reminderMessage = {
-          info: {
-            id: `todo-reminder-msg-${now}`,
-            sessionID: sessionID,
-            role: "user" as const,
-            agent: lastUser.info.agent,
-            model: lastUser.info.model,
-            time: { created: now },
+        // Check if we already injected recently (within last 2 messages)
+        const lastInjectedAt = lastInjectionCount.get(`${sessionID}-injected`) ?? 0;
+        if (currentCount - lastInjectedAt < 2) {
+          await log(client, "debug", "Cooldown active", { 
+            sessionID, 
+            lastInjectedAt, 
+            currentCount 
+          });
+          lastInjectionCount.set(sessionID, currentCount);
+          return;
+        }
+
+        // Inject reminder using prompt (persists to UI)
+        await client.session.prompt({
+          path: { id: sessionID },
+          body: {
+            parts: [
+              {
+                type: "text",
+                text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
+              },
+            ],
           },
-          parts: [
-            {
-              id: `todo-reminder-part-${now}`,
-              messageID: `todo-reminder-msg-${now}`,
-              sessionID: sessionID,
-              type: "text" as const,
-              text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
-            },
-          ],
-        };
+        });
 
-        messages.push(reminderMessage);
-
-        lastInjectionCount.set(sessionID, assistantCount);
+        // Mark when we last injected
+        lastInjectionCount.set(`${sessionID}-injected`, currentCount);
+        lastInjectionCount.set(sessionID, currentCount);
         
         await log(client, "info", `Injected reminder for ${pending.length} pending todo(s)`, { 
           sessionID, 
           pendingCount: pending.length,
-          assistantCount 
+          messageCount: currentCount 
         });
       } catch (error) {
-        await log(client, "error", "Failed to query todos", { 
+        await log(client, "error", "Failed to inject reminder", { 
           sessionID, 
           error: String(error) 
         });
