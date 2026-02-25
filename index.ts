@@ -19,7 +19,7 @@ async function log(
 
 export const TodoReminderPlugin: Plugin = async ({ client }) => {
   const lastInjectionTime = new Map<string, number>();
-  const MIN_COOLDOWN_MS = 60_000; // 1 minute cooldown between reminders
+  const MIN_COOLDOWN_MS = 150_000; // 1 minute cooldown between reminders
 
   await log(client, "info", "Plugin loaded");
 
