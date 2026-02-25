@@ -19,9 +19,9 @@ async function log(
 
 export const TodoReminderPlugin: Plugin = async ({ client }) => {
   const lastInjectionTime = new Map<string, number>();
-  const MIN_COOLDOWN_MS = 150_000; // 1 minute cooldown between reminders
+  const MIN_COOLDOWN_MS = 150_000; // 2.5 minute cooldown between reminders
 
-  await log(client, "info", "Plugin loaded");
+  await log(client, "info", "Plugin loaded (ephemeral mode)");
 
   return {
     "experimental.chat.messages.transform": async (_input, output) => {
@@ -38,6 +38,12 @@ export const TodoReminderPlugin: Plugin = async ({ client }) => {
       }
 
       if (!lastAssistant) {
+        return;
+      }
+
+      // Only fire in build mode - plan mode doesn't do work that needs todo tracking
+      const agent = (lastAssistant.info as any).agent;
+      if (agent !== "build") {
         return;
       }
 
@@ -58,37 +64,45 @@ export const TodoReminderPlugin: Plugin = async ({ client }) => {
           return;
         }
 
-        await log(client, "info", `Attempting to inject reminder for ${pending.length} pending todo(s)`, {
+        // Find the last user message to attach the reminder to (like DCP does)
+        let lastUser = null;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].info.role === "user") {
+            lastUser = messages[i];
+            break;
+          }
+        }
+
+        if (!lastUser) {
+          return;
+        }
+
+        await log(client, "info", `Injecting ephemeral reminder for ${pending.length} pending todo(s)`, {
           sessionID,
           pendingCount: pending.length,
         });
 
-        const result = await client.session.prompt({
-          path: { id: sessionID },
-          body: {
-            noReply: true,
-            parts: [
-              {
-                type: "text",
-                text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
-              },
-            ],
-          },
-        });
+        // Create ephemeral text part (like DCP)
+        // This is NOT persisted to database - exists only for this LLM call
+        // No synthetic flag = visible in scrollback (like DCP)
+        lastUser.parts.push({
+          id: `todo-reminder-${Date.now()}`,
+          sessionID,
+          messageID: lastUser.info.id,
+          type: "text",
+          text: `[Todo Reminder] You have ${pending.length} pending item(s). After completing your current task, please review and update your todo list using the todowrite tool.`,
+        } as any);
 
         lastInjectionTime.set(sessionID, now);
 
-        await log(client, "info", `Successfully injected reminder`, {
+        await log(client, "info", `Successfully injected ephemeral reminder`, {
           sessionID,
           pendingCount: pending.length,
-          resultStatus: (result as any)?.status,
-          resultData: JSON.stringify((result as any)?.data)?.substring(0, 200),
         });
       } catch (error) {
         await log(client, "error", "Failed to inject reminder", {
           sessionID,
           error: String(error),
-          errorStack: (error as any)?.stack,
         });
       }
     },
